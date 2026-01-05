@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import {
   DollarSign,
   Phone,
@@ -10,20 +11,32 @@ import {
   RefreshCw,
   CheckCircle,
   XCircle,
+  Loader2,
 } from 'lucide-react';
 import KPICard from './components/KPICard';
 import PipelineFunnel from './components/PipelineFunnel';
 import TrendCharts from './components/TrendCharts';
 import ChannelComparison from './components/ChannelComparison';
 import {
-  pipelineStages,
-  weeklyTrends,
-  kpiSummary,
-  channelMetrics,
-  integrationStatus,
+  pipelineStages as defaultPipelineStages,
+  weeklyTrends as defaultWeeklyTrends,
+  kpiSummary as defaultKpiSummary,
+  channelMetrics as defaultChannelMetrics,
+  integrationStatus as defaultIntegrationStatus,
 } from './data/mockData';
+import type { KPISummary, WeeklyTrend, ChannelMetrics, PipelineStage, IntegrationStatus } from './data/types';
+
+const API_URL = 'http://localhost:3001';
 
 function App() {
+  const [kpiSummary, setKpiSummary] = useState<KPISummary>(defaultKpiSummary);
+  const [weeklyTrends, setWeeklyTrends] = useState<WeeklyTrend[]>(defaultWeeklyTrends);
+  const [channelMetrics, setChannelMetrics] = useState<ChannelMetrics[]>(defaultChannelMetrics);
+  const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>(defaultPipelineStages);
+  const [integrationStatus, setIntegrationStatus] = useState<IntegrationStatus>(defaultIntegrationStatus);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<string | null>(null);
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -41,6 +54,61 @@ function App() {
     if (status === 'error') return <XCircle className="h-4 w-4 text-red-500" />;
     return <XCircle className="h-4 w-4 text-gray-400" />;
   };
+
+  const syncData = async () => {
+    setSyncing(true);
+    try {
+      // First sync all data sources
+      const syncResponse = await fetch(`${API_URL}/api/sync/all`, { method: 'POST' });
+      const syncResult = await syncResponse.json();
+      console.log('Sync result:', syncResult);
+
+      // Update integration status based on sync results
+      if (syncResult.results) {
+        setIntegrationStatus({
+          facebook: syncResult.results.facebook?.success ? 'connected' : 'error',
+          calendly: syncResult.results.calendly?.success ? 'connected' : 'error',
+          ghl: syncResult.results.ghl?.success ? 'connected' : 'error',
+          lastSync: new Date().toISOString()
+        });
+      }
+
+      // Then fetch the aggregated metrics
+      const metricsResponse = await fetch(`${API_URL}/api/metrics`);
+      const metricsData = await metricsResponse.json();
+      console.log('Metrics data:', metricsData);
+
+      if (metricsData.success && metricsData.data) {
+        if (metricsData.data.kpiSummary) {
+          setKpiSummary(metricsData.data.kpiSummary);
+        }
+        if (metricsData.data.weeklyTrends?.length > 0) {
+          setWeeklyTrends(metricsData.data.weeklyTrends);
+        }
+        if (metricsData.data.channelMetrics?.length > 0) {
+          setChannelMetrics(metricsData.data.channelMetrics);
+        }
+        setLastSync(new Date().toLocaleString());
+      }
+    } catch (error) {
+      console.error('Sync failed:', error);
+      alert('Sync failed. Make sure the backend server is running on port 3001.\n\nRun: npm run server:dev');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // Update pipeline stages when KPI changes
+  useEffect(() => {
+    if (kpiSummary) {
+      setPipelineStages([
+        { name: 'Calls Booked', count: kpiSummary.totalCallsBooked, value: 0, color: '#3B82F6' },
+        { name: 'Live Calls', count: kpiSummary.totalLiveCalls, value: 0, color: '#8B5CF6', conversionRate: kpiSummary.showRate },
+        { name: 'Qualified', count: kpiSummary.totalQualified, value: kpiSummary.totalQualified * 6000, color: '#EC4899', conversionRate: kpiSummary.qualifiedRate },
+        { name: 'Closed Won', count: kpiSummary.totalClosed, value: kpiSummary.totalRevenue, color: '#22C55E', conversionRate: kpiSummary.closeRate },
+      ]);
+    }
+  }, [kpiSummary]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -75,13 +143,19 @@ function App() {
               </div>
               <div className="flex items-center gap-4">
                 <span className="text-sm text-gray-500">
-                  {integrationStatus.lastSync
-                    ? `Last sync: ${integrationStatus.lastSync}`
-                    : 'Using sample data'}
+                  {lastSync ? `Last sync: ${lastSync}` : 'Using sample data'}
                 </span>
-                <button className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors">
-                  <RefreshCw className="h-4 w-4" />
-                  Sync Data
+                <button
+                  onClick={syncData}
+                  disabled={syncing}
+                  className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {syncing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  {syncing ? 'Syncing...' : 'Sync Data'}
                 </button>
               </div>
             </div>
@@ -236,7 +310,7 @@ function App() {
         {/* Footer */}
         <footer className="text-center text-sm text-gray-500 py-8 border-t border-gray-200">
           <p>SalesDash - Marketing & Sales Reporting Dashboard</p>
-          <p className="mt-1">Connect your accounts to see live data</p>
+          <p className="mt-1">Click "Sync Data" to pull live data from your integrations</p>
         </footer>
       </main>
     </div>
