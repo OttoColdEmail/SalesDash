@@ -48,11 +48,19 @@ interface GHLData {
 let ghlData: GHLData[] = [];
 let pipelineStages: GHLPipelineStage[] = [];
 
-// Stage name mappings (customize based on your pipeline)
+// Stage name mappings for "Standard" pipeline
+// Stages: Intro call, No-show - Qualified, No-Show - Unqualified,
+//         Call held - Proposal, Call held - unqualified,
+//         Closed won - 90 day, closed lost - 90 day
 const STAGE_MAPPINGS = {
-  liveCalls: ['call completed', 'live call', 'showed', 'completed'],
-  qualified: ['qualified', 'discovery complete', 'proposal sent'],
-  closed: ['closed won', 'won', 'customer']
+  // Live calls = call actually happened (not no-shows)
+  liveCalls: ['call held', 'closed won', 'closed lost'],
+  // Qualified = good fit prospect (proposal sent or closed)
+  qualified: ['call held - proposal', 'closed won', 'no-show - qualified'],
+  // Closed won
+  closedWon: ['closed won'],
+  // Closed lost (for tracking)
+  closedLost: ['closed lost']
 };
 
 function matchesStage(stageName: string, keywords: string[]): boolean {
@@ -128,17 +136,15 @@ export async function syncGoHighLevel(): Promise<GHLData[]> {
       const stageName = stage?.name || '';
 
       // Categorize based on stage
-      if (matchesStage(stageName, STAGE_MAPPINGS.closed)) {
+      // Check each category independently since stages can match multiple
+      if (matchesStage(stageName, STAGE_MAPPINGS.closedWon)) {
         current.closedDeals++;
         current.revenue += opp.monetaryValue || 0;
-        // Closed implies qualified and live
+      }
+      if (matchesStage(stageName, STAGE_MAPPINGS.qualified)) {
         current.qualifiedCalls++;
-        current.liveCalls++;
-      } else if (matchesStage(stageName, STAGE_MAPPINGS.qualified)) {
-        current.qualifiedCalls++;
-        // Qualified implies live
-        current.liveCalls++;
-      } else if (matchesStage(stageName, STAGE_MAPPINGS.liveCalls)) {
+      }
+      if (matchesStage(stageName, STAGE_MAPPINGS.liveCalls)) {
         current.liveCalls++;
       }
 
