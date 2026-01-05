@@ -103,12 +103,19 @@ export async function syncGoHighLevel(): Promise<GHLData[]> {
       console.log('GHL: No pipelines found in response');
     }
 
-    // Fetch opportunities
+    // Fetch opportunities using POST search endpoint
     console.log('GHL: Fetching opportunities...');
-    const oppsUrl = `https://services.leadconnectorhq.com/opportunities/?locationId=${locationId}&limit=100`;
+    const oppsUrl = `https://services.leadconnectorhq.com/opportunities/search`;
     console.log('GHL: Opportunities URL:', oppsUrl);
 
-    const oppsResponse = await fetch(oppsUrl, { headers });
+    const oppsResponse = await fetch(oppsUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        locationId,
+        limit: 100
+      })
+    });
     const oppsText = await oppsResponse.text();
     console.log('GHL: Opportunities response status:', oppsResponse.status);
     console.log('GHL: Opportunities response preview:', oppsText.substring(0, 500));
