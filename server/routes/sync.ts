@@ -33,9 +33,15 @@ syncRouter.post('/all', async (req, res) => {
 
     // Sync GoHighLevel
     try {
+      console.log('=== Starting GHL sync ===');
+      console.log('GHL_API_KEY exists:', !!process.env.GHL_API_KEY);
+      console.log('GHL_LOCATION_ID exists:', !!process.env.GHL_LOCATION_ID);
       await syncGoHighLevel();
       results.ghl.success = true;
+      console.log('=== GHL sync completed successfully ===');
     } catch (error) {
+      console.error('=== GHL sync FAILED ===');
+      console.error('Error:', error);
       results.ghl.error = error instanceof Error ? error.message : 'Unknown error';
     }
 
